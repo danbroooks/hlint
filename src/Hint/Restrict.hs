@@ -86,18 +86,23 @@ type RestrictFunctions = (Bool, Map.Map String RestrictFunction)
 type OtherRestrictItems = Map.Map RestrictType (Bool, Map.Map String RestrictItem)
 
 restrictions :: [Setting] -> (RestrictFunctions, OtherRestrictItems)
-restrictions settings = (rFunction, rOthers)
+restrictions settings = (functionRestrictions rfs, otherRestrictions ros)
     where
         (map snd -> rfs, ros) = partition ((== RestrictFunction) . fst) [(restrictType x, x) | SettingRestrict x <- settings]
-        rFunction = (all restrictDefault rfs, Map.fromListWith (<>) [mkRf s r | r <- rfs, s <- restrictName r])
+
+functionRestrictions :: [Restrict] -> RestrictFunctions
+functionRestrictions rfs = (all restrictDefault rfs, Map.fromListWith (<>) [mkRf s r | r <- rfs, s <- restrictName r])
+    where
         mkRf s Restrict{..} = (name, RestrictFun $ Map.singleton modu (restrictWithin, restrictMessage))
           where
             -- Parse module and name from s. module = Nothing if the rule is unqualified.
             (modu, name) = first (fmap NonEmpty.init . NonEmpty.nonEmpty) (breakEnd (== '.') s)
 
-        rOthers = Map.map f $ Map.fromListWith (++) (map (second pure) ros)
+otherRestrictions :: [(RestrictType, Restrict)] -> OtherRestrictItems
+otherRestrictions ros = Map.map f $ Map.fromListWith (++) (map (second pure) ros)
+    where
         f rs = (all restrictDefault rs
-               ,Map.fromListWith (<>) [(s, RestrictItem restrictAs restrictWithin restrictBadIdents restrictMessage) | Restrict{..} <- rs, s <- restrictName])
+               , Map.fromListWith (<>) [(s, RestrictItem restrictAs restrictWithin restrictBadIdents restrictMessage) | Restrict{..} <- rs, s <- restrictName])
 
 ideaMessage :: Maybe String -> Idea -> Idea
 ideaMessage (Just message) w = w{ideaNote=[Note message]}
