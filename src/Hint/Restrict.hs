@@ -67,11 +67,13 @@ data RestrictItem = RestrictItem
     {riAs :: [String]
     ,riWithin :: [(String, String)]
     ,riBadIdents :: [String]
+    ,riQualifiedStyle :: Maybe (NonEmpty.NonEmpty ImportDeclQualifiedStyle)
     ,riMessage :: Maybe String
     }
 
 instance Semigroup RestrictItem where
-    RestrictItem x1 x2 x3 x4 <> RestrictItem y1 y2 y3 y4 = RestrictItem (x1<>y1) (x2<>y2) (x3<>y3) (x4<>y4)
+    RestrictItem x1 x2 x3 x4 x5 <> RestrictItem y1 y2 y3 y4 y5 =
+        RestrictItem (x1<>y1) (x2<>y2) (x3<>y3) (x4<>y4) (x5<>y5)
 
 -- Contains a map from module (Nothing if the rule is unqualified) to (within, message), so that we can
 -- distinguish functions with the same name.
@@ -99,10 +101,28 @@ functionRestrictions rfs = (all restrictDefault rfs, Map.fromListWith (<>) [mkRf
             (modu, name) = first (fmap NonEmpty.init . NonEmpty.nonEmpty) (breakEnd (== '.') s)
 
 otherRestrictions :: [(RestrictType, Restrict)] -> OtherRestrictItems
-otherRestrictions ros = Map.map f $ Map.fromListWith (++) (map (second pure) ros)
+otherRestrictions ros = Map.map f $ Map.fromListWith (<>) (second pure <$> ros)
     where
         f rs = (all restrictDefault rs
-               , Map.fromListWith (<>) [(s, RestrictItem restrictAs restrictWithin restrictBadIdents restrictMessage) | Restrict{..} <- rs, s <- restrictName])
+               , Map.fromListWith (<>) [(s, restrictToRestrictItem rs') | rs' <- rs, s <- restrictName rs'])
+
+restrictToRestrictItem :: Restrict -> RestrictItem
+restrictToRestrictItem Restrict{..} = RestrictItem
+    { riAs = restrictAs
+    , riWithin = restrictWithin
+    , riBadIdents = restrictBadIdents
+    , riQualifiedStyle = readQualifiedStyles =<< restrictQualifiedStyle
+    , riMessage = restrictMessage
+    }
+
+readQualifiedStyles :: NonEmpty.NonEmpty String -> Maybe (NonEmpty.NonEmpty ImportDeclQualifiedStyle)
+readQualifiedStyles = NonEmpty.nonEmpty . mapMaybe parseStrStyles . NonEmpty.toList
+  where
+      parseStrStyles = \case
+          "post" -> Just QualifiedPost
+          "pre" -> Just QualifiedPre
+          "never" -> Just NotQualified
+          _ -> Nothing
 
 ideaMessage :: Maybe String -> Idea -> Idea
 ideaMessage (Just message) w = w{ideaNote=[Note message]}
@@ -145,11 +165,12 @@ checkImports modu imp rm = do
 
 checkImportRestrictions :: String -> LImportDecl GhcPs -> (Bool, Map.Map String RestrictItem) -> [Idea]
 checkImportRestrictions modu i@(L _ ImportDecl{..}) (def, mp) = do
-    let ri = Map.findWithDefault (RestrictItem [] [("","") | def] [] Nothing) (moduleNameString (unLoc ideclName)) mp
+    let ri = Map.findWithDefault (RestrictItem [] [("","") | def] [] Nothing Nothing) (moduleNameString (unLoc ideclName)) mp
     let checks =
             [ checkRestrictedImport ri
             , checkRestrictedIdent ri
             , checkRestrictedQual ri
+            , checkRestrictedUnqualified ri
             ]
 
     msg <- msum checks
@@ -170,6 +191,12 @@ checkImportRestrictions modu i@(L _ ImportDecl{..}) (def, mp) = do
             let allowQual = maybe True (\x -> null riAs || moduleNameString (unLoc x) `elem` riAs) ideclAs
             guard (not allowQual)
             pure $ warn "Avoid restricted qualification" i (noLoc $ (unLoc i){ ideclAs=noLoc . mkModuleName <$> listToMaybe riAs} :: Located (ImportDecl GhcPs)) []
+
+        checkRestrictedUnqualified RestrictItem{..} = maybeToList $ do
+            qualStyles <- riQualifiedStyle
+            let allowUnqualified = ideclQualified `elem` qualStyles
+            guard (not allowUnqualified)
+            pure $ warn "Qualification style" i (noLoc $ (unLoc i){ ideclQualified = NonEmpty.head qualStyles} :: Located (ImportDecl GhcPs)) []
 
 importListToIdents :: IE GhcPs -> [String]
 importListToIdents =

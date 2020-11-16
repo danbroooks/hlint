@@ -9,7 +9,7 @@ import Data.Char
 import Data.List.Extra
 import Prelude
 
-
+import Data.List.NonEmpty (NonEmpty(..))
 import qualified GHC.Hs
 import Fixity
 import GHC.Util
@@ -111,6 +111,7 @@ data Restrict = Restrict
     ,restrictDefault :: Bool
     ,restrictName :: [String]
     ,restrictAs :: [String] -- for RestrictModule only, what module names you can import it as
+    ,restrictQualifiedStyle :: Maybe (NonEmpty String) -- for RestrictModule only, force a module to always use a qualified style
     ,restrictWithin :: [(String, String)]
     ,restrictBadIdents :: [String]
     ,restrictMessage :: Maybe String

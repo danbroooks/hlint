@@ -1,0 +1,24 @@
+---------------------------------------------------------------------
+RUN tests/always-qualified-1.hs --hint=data/always-qualified.yaml
+FILE tests/always-qualified-1.hs
+module Spec where
+import Data.List as L
+main = print 'a'
+OUTPUT
+tests/always-qualified-1.hs:2:1-21: Warning: Qualification style
+Found:
+  import Data.List as L
+Perhaps:
+  import qualified Data.List as L
+Note: may break the code
+
+1 hint
+
+---------------------------------------------------------------------
+RUN tests/always-qualified-2.hs --hint=data/always-qualified.yaml
+FILE tests/always-qualified-2.hs
+module Spec where
+import qualified Data.List as L
+main = print 'a'
+OUTPUT
+No hints

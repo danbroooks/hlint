@@ -40,6 +40,7 @@ import GHC.Util (baseDynFlags, Scope, scopeCreate)
 import Language.Haskell.GhclibParserEx.GHC.Hs.ExtendInstances
 import Language.Haskell.GhclibParserEx.GHC.Types.Name.Reader
 import Data.Char
+import Data.List.NonEmpty (NonEmpty, nonEmpty)
 
 #ifdef HS_YAML
 
@@ -292,15 +293,19 @@ parseRestrict restrictType v = do
         Just def -> do
             b <- parseBool def
             allowFields v ["default"]
-            pure $ Restrict restrictType b [] [] [] [] Nothing
+            pure $ Restrict restrictType b [] [] Nothing [] [] Nothing
         Nothing -> do
             restrictName <- parseFieldOpt "name" v >>= maybe (pure []) parseArrayString
             restrictWithin <- parseFieldOpt "within" v >>= maybe (pure [("","")]) (parseArray >=> concatMapM parseWithin)
             restrictAs <- parseFieldOpt "as" v >>= maybe (pure []) parseArrayString
+            restrictQualifiedStyle <- parseFieldOpt "qualifiedStyle" v >>= maybe (pure Nothing) parseQualifiedStyle
             restrictBadIdents <- parseFieldOpt "badidents" v >>= maybe (pure []) parseArrayString
             restrictMessage <- parseFieldOpt "message" v >>= maybeParse parseString
-            allowFields v $ ["as" | restrictType == RestrictModule] ++ ["badidents", "name", "within", "message"]
+            allowFields v $ (do guard (restrictType == RestrictModule); ["as","qualifiedStyle"]) ++ ["badidents", "name", "within", "message"]
             pure Restrict{restrictDefault=True,..}
+
+parseQualifiedStyle :: Val -> Parser (Maybe (NonEmpty String))
+parseQualifiedStyle v = nonEmpty <$> parseArrayString v
 
 parseWithin :: Val -> Parser [(String, String)] -- (module, decl)
 parseWithin v = do

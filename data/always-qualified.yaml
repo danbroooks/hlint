@@ -1,0 +1,1 @@
+- modules: { name: [Data.List], as: L, qualifiedStyle: ['pre'] }
